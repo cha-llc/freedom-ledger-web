@@ -9,11 +9,13 @@ import {
   CreditCard,
   ArrowRight,
   Upload,
+  TrendingUp,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { useStore } from '@/core/useStore';
 import { formatMoney, formatMoneyShort, formatDate } from '@/core/format';
 import { calcSafeToSpend, calcSurvival } from '@/core/finance';
+import { buildTemporalSnapshot } from '@/core/temporal';
 import { cjBotService } from '@/core/cjBotService';
 import type { CJBotResponse } from '@/core/cjBotTypes';
 import {
@@ -99,6 +101,7 @@ export default function DashboardPage() {
       : 'var(--success)';
 
   const recent = store.transactions.slice(0, 6);
+  const snap = useMemo(() => buildTemporalSnapshot(store.transactions), [store.transactions]);
 
   if (!hasData) {
     return (
@@ -276,6 +279,50 @@ export default function DashboardPage() {
           />
         </div>
       </Card>
+
+      {/* This month's trajectory — temporal projection */}
+      {snap.pace.pace !== 'no_baseline' && (
+        <>
+          <SectionLabel>This month&apos;s trajectory</SectionLabel>
+          <Card>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ flex: '1 1 140px' }}>
+                <div className="stat-label">Spent so far</div>
+                <div style={{ fontWeight: 800, fontSize: 22, marginTop: 2 }}>
+                  {fmt(snap.pace.monthToDateSpending)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>
+                  day {snap.pace.daysElapsed} of {snap.pace.daysInMonth}
+                </div>
+              </div>
+              <div style={{ flex: '1 1 140px' }}>
+                <div className="stat-label">Projected month-end</div>
+                <div style={{ fontWeight: 800, fontSize: 22, marginTop: 2 }}>
+                  {fmt(snap.pace.projectedMonthEnd)}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    marginTop: 2,
+                    color:
+                      snap.pace.pace === 'ahead'
+                        ? 'var(--danger)'
+                        : snap.pace.pace === 'behind'
+                        ? 'var(--success)'
+                        : 'var(--text-muted)',
+                  }}
+                >
+                  {snap.pace.vsAveragePct > 0 ? '+' : ''}
+                  {snap.pace.vsAveragePct}% vs your average
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => router.push('/insights')}>
+                <TrendingUp size={15} /> See trends
+              </button>
+            </div>
+          </Card>
+        </>
+      )}
 
       {/* Foundation funds */}
       <SectionLabel>The three funds</SectionLabel>

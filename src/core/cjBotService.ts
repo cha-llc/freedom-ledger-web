@@ -102,10 +102,26 @@ class MockCJBotProvider implements CJBotProvider {
       );
     }
 
+    // Temporal: if this month is pacing above the historical baseline, flag it.
+    if (ctx.hasEnoughHistory && ctx.spendingPace === 'ahead') {
+      actionItems.push(
+        `You're pacing to spend ${formatMoney(ctx.projectedMonthEndSpending, ctx.currency)} this month — about ${Math.abs(Math.round(ctx.spendingVsAveragePct))}% over your ${formatMoney(ctx.averageMonthlySpending, ctx.currency)} average. Ease off where you can.`,
+      );
+    }
+
+    const paceLine =
+      ctx.hasEnoughHistory && ctx.spendingPace !== 'no_baseline'
+        ? ctx.spendingPace === 'ahead'
+          ? ` Based on ${ctx.monthsOfHistory} months of history, you're trending above your usual spend.`
+          : ctx.spendingPace === 'behind'
+          ? ` You're tracking below your ${formatMoney(ctx.averageMonthlySpending, ctx.currency)} monthly average — good.`
+          : ` You're tracking near your usual ${formatMoney(ctx.averageMonthlySpending, ctx.currency)}/month.`
+        : '';
+
     return {
       summary: msg
         ? `Looking at your numbers to answer: "${msg.slice(0, 80)}"`
-        : `You have ${formatMoney(ctx.cashAvailable, ctx.currency)} on hand with ${formatMoney(ctx.upcomingBillsTotal, ctx.currency)} in bills and ${formatMoney(ctx.totalDebtMinimums, ctx.currency)} in debt minimums before your next income.`,
+        : `You have ${formatMoney(ctx.cashAvailable, ctx.currency)} on hand with ${formatMoney(ctx.upcomingBillsTotal, ctx.currency)} in bills and ${formatMoney(ctx.totalDebtMinimums, ctx.currency)} in debt minimums before your next income.${paceLine}`,
       recommendation:
         after < 0
           ? `You are short by ${formatMoney(-after, ctx.currency)} against obligations before income. Pay critical bills first, defer anything non-essential, and don't add new spending.`
@@ -114,7 +130,7 @@ class MockCJBotProvider implements CJBotProvider {
           : `You have roughly ${formatMoney(after, ctx.currency)} of room after obligations. Send a slice to Rainy Day before it gets spent.`,
       riskLevel: risk,
       actionItems,
-      explanation: `Math: cash ${formatMoney(ctx.cashAvailable, ctx.currency)} − bills ${formatMoney(ctx.upcomingBillsTotal, ctx.currency)} − debt minimums ${formatMoney(ctx.totalDebtMinimums, ctx.currency)} = ${formatMoney(after, ctx.currency)} before your next income in ${ctx.daysUntilIncome} day(s).`,
+      explanation: `Math: cash ${formatMoney(ctx.cashAvailable, ctx.currency)} − bills ${formatMoney(ctx.upcomingBillsTotal, ctx.currency)} − debt minimums ${formatMoney(ctx.totalDebtMinimums, ctx.currency)} = ${formatMoney(after, ctx.currency)} before your next income in ${ctx.daysUntilIncome} day(s).${ctx.hasEnoughHistory ? ` Projection uses ${ctx.monthsOfHistory} months of your history.` : ''}`,
       requiresUserApproval: false,
     };
   }
@@ -148,27 +164,55 @@ class MockCJBotProvider implements CJBotProvider {
   private budget(ctx: FinanceContext, cat?: BudgetCategory): CJBotResponse {
     if (cat) {
       const over = cat.actualAmount - cat.budgetAmount;
-      const rec =
-        over > 0
-          ? Math.ceil((cat.actualAmount * 1.05) / 5) * 5
-          : Math.max(Math.ceil((cat.actualAmount * 1.1) / 5) * 5, 5);
+      const hist = ctx.categoryAverages[cat.category];
+      const hasHistory = hist && hist.monthsSeen >= 2;
+
+      // With history, budget to the projected next month (trend-aware) or the
+      // average — that's how real budgeting works. Without it, fall back to this
+      // month's actual plus a small buffer.
+      let rec: number;
+      let basisNote: string;
+      if (hasHistory) {
+        const target = hist.trend === 'rising' ? hist.projectedNextMonth : hist.average;
+        rec = Math.max(Math.ceil((target * 1.05) / 5) * 5, 5);
+        basisNote =
+          hist.trend === 'rising'
+            ? `your spend here has been climbing (avg ${formatMoney(hist.average, ctx.currency)}/mo, trending toward ${formatMoney(hist.projectedNextMonth, ctx.currency)})`
+            : hist.trend === 'falling'
+            ? `your spend here has been easing (avg ${formatMoney(hist.average, ctx.currency)}/mo)`
+            : `your ${formatMoney(hist.average, ctx.currency)}/mo average over ${hist.monthsSeen} months`;
+      } else {
+        rec =
+          over > 0
+            ? Math.ceil((cat.actualAmount * 1.05) / 5) * 5
+            : Math.max(Math.ceil((cat.actualAmount * 1.1) / 5) * 5, 5);
+        basisNote = `this month's spend (not enough history yet for a trend)`;
+      }
+
       return {
-        summary: `${cat.category}: spent ${formatMoney(cat.actualAmount, ctx.currency)} of ${formatMoney(cat.budgetAmount, ctx.currency)}.`,
+        summary: `${cat.category}: spent ${formatMoney(cat.actualAmount, ctx.currency)} of ${formatMoney(cat.budgetAmount, ctx.currency)}${hasHistory ? ` · ${formatMoney(hist.average, ctx.currency)}/mo average` : ''}.`,
         recommendation: cat.locked
           ? `This category is locked, so I'm leaving it. Unlock it if you want me to propose a change.`
           : over > 0
-          ? `You're over by ${formatMoney(over, ctx.currency)}. A realistic budget is ${formatMoney(rec, ctx.currency)} based on actual spend.`
-          : `You're under budget. You could trim this to ${formatMoney(rec, ctx.currency)} and route the difference to Rainy Day.`,
+          ? `You're over by ${formatMoney(over, ctx.currency)}. Based on ${basisNote}, a realistic budget is ${formatMoney(rec, ctx.currency)}.`
+          : `Based on ${basisNote}, ${formatMoney(rec, ctx.currency)} is a realistic budget here.${hasHistory && hist.trend === 'falling' ? ' Route what you save to Rainy Day.' : ''}`,
         riskLevel: over > 0 ? 'caution' : 'safe',
         actionItems: cat.locked ? [] : [`Approve to set ${cat.category} to ${formatMoney(rec, ctx.currency)}.`],
         suggestedBudgetAmount: cat.locked ? undefined : rec,
-        explanation: `Recommendation = recent actual spend with a small buffer, rounded to the nearest $5. I never change your budget without approval.`,
+        explanation: hasHistory
+          ? `Recommendation is built from ${hist.monthsSeen} months of your actual spending in this category (${hist.trend} trend), rounded to the nearest $5. I never change your budget without approval.`
+          : `Recommendation = recent actual spend with a small buffer, rounded to the nearest $5. It'll sharpen as you build history. I never change your budget without approval.`,
         requiresUserApproval: !cat.locked,
       };
     }
+
+    const histNote =
+      ctx.hasEnoughHistory
+        ? ` Your average is ${formatMoney(ctx.averageMonthlySpending, ctx.currency)}/month; you're projected to spend ${formatMoney(ctx.projectedNextMonthSpending, ctx.currency)} next month.`
+        : '';
     return {
-      summary: `Monthly spend so far is ${formatMoney(ctx.monthlySpending, ctx.currency)}.`,
-      recommendation: `Open a category to get a specific, approvable recommendation. I base each one on what you actually spent.`,
+      summary: `Monthly spend so far is ${formatMoney(ctx.monthlySpending, ctx.currency)}.${histNote}`,
+      recommendation: `Open a category to get a specific, approvable recommendation. ${ctx.hasEnoughHistory ? 'Each one is based on your actual spending history and trend.' : 'Each one is based on what you actually spent.'}`,
       riskLevel: 'safe',
       actionItems: ['Tap a category card to see a proposed amount.'],
       explanation: `Budgets only change when you approve a recommendation.`,
@@ -248,17 +292,39 @@ class MockCJBotProvider implements CJBotProvider {
     if (rainyGap > 0) items.push(`Rainy Day is ${Math.round(pct(ctx.rainyDayProgress.current, ctx.rainyDayProgress.target) * 100)}% there — ${formatMoney(rainyGap, ctx.currency)} to go.`);
     if (!ctx.retirementStarted) items.push(`Retirement isn't started. Opening the account counts as progress even at ${formatMoney(0, ctx.currency)}.`);
 
+    // Temporal: project when each fund is reached at the observed savings pace.
+    const onPace = ctx.goalProjections.filter((g) => g.monthsToTarget != null && g.monthsToTarget > 0 && g.basis === 'observed');
+    for (const g of onPace.slice(0, 2)) {
+      const yrs = (g.monthsToTarget as number) / 12;
+      const when =
+        (g.monthsToTarget as number) <= 1
+          ? 'within a month'
+          : (g.monthsToTarget as number) < 12
+          ? `in about ${g.monthsToTarget} months`
+          : `in about ${yrs.toFixed(1)} years`;
+      items.push(`At your pace of ${formatMoney(g.monthlyContribution, ctx.currency)}/month, ${g.name} is funded ${when}.`);
+    }
+    const stalled = ctx.goalProjections.filter((g) => g.monthsToTarget == null && g.basis === 'none');
+    if (stalled.length > 0 && ctx.observedMonthlySavings <= 0) {
+      items.push(`Set a monthly amount for ${stalled[0].name} — even ${formatMoney(micro, ctx.currency)} gives it a finish line.`);
+    }
+
+    const paceSummary =
+      ctx.observedMonthlySavings > 0
+        ? ` You've been saving about ${formatMoney(ctx.observedMonthlySavings, ctx.currency)}/month.`
+        : '';
+
     return {
       summary: savedZero
-        ? `No savings yet this month — let's fix that with a small, real amount.`
-        : `You've moved ${formatMoney(ctx.savedThisMonth, ctx.currency)} to savings this month. Keep the streak.`,
+        ? `No savings yet this month — let's fix that with a small, real amount.${paceSummary}`
+        : `You've moved ${formatMoney(ctx.savedThisMonth, ctx.currency)} to savings this month. Keep the streak.${paceSummary}`,
       recommendation: tight
         ? `Money's tight, so don't set a number you'll break. Move ${formatMoney(micro, ctx.currency)} now — small and consistent beats big and skipped.`
         : `Send ${formatMoney(micro, ctx.currency)} to Rainy Day this week, then set a $${Math.max(micro, 20)} auto-contribution per paycheck.`,
       riskLevel: savedZero ? 'caution' : 'safe',
       actionItems: items.length ? items : [`Add ${formatMoney(micro, ctx.currency)} to Rainy Day to stay ahead.`],
       savingsSuggestion: micro,
-      explanation: `The three funds — Rainy Day, Emergency, Retirement — are what keep one bad week from becoming a crisis. I push them every time.`,
+      explanation: `The three funds — Rainy Day, Emergency, Retirement — are what keep one bad week from becoming a crisis.${ctx.observedMonthlySavings > 0 ? ' Timelines above use your actual savings pace.' : ''} I push them every time.`,
       requiresUserApproval: false,
     };
   }

@@ -60,6 +60,36 @@ export interface FinanceContext {
 
   recentTransactions: Transaction[];
   savedThisMonth: number;
+
+  // ── Temporal: history, current pacing, and projection ──
+  // Present once there is data; lets CJ-Bot reason over time, not just today.
+  monthsOfHistory: number;
+  hasEnoughHistory: boolean;
+  averageMonthlySpending: number;
+  averageMonthlyIncome: number;
+  // This month so far vs. the historical baseline.
+  monthToDateSpending: number;
+  projectedMonthEndSpending: number;
+  spendingPace: 'ahead' | 'behind' | 'on_track' | 'no_baseline';
+  spendingVsAveragePct: number;
+  // Next month forecast.
+  projectedNextMonthSpending: number;
+  projectionConfidence: 'high' | 'medium' | 'low' | 'none';
+  // Notable category movements (rising/falling) for narrative.
+  risingCategories: { category: string; average: number; trendPctPerMonth: number }[];
+  // Per-category historical monthly average + trend, for budgeting any category.
+  categoryAverages: Record<
+    string,
+    { average: number; recent: number; trend: 'rising' | 'falling' | 'stable' | 'insufficient'; projectedNextMonth: number; monthsSeen: number }
+  >;
+  // When each savings goal is projected to be reached.
+  goalProjections: {
+    name: string;
+    monthsToTarget: number | null;
+    monthlyContribution: number;
+    basis: 'observed' | 'target' | 'none';
+  }[];
+  observedMonthlySavings: number;
 }
 
 export type ScreenContext =

@@ -9,6 +9,7 @@ import {
   Receipt,
   PieChart,
   Target,
+  TrendingUp,
   CreditCard,
   ShieldAlert,
   Plane,
@@ -22,6 +23,7 @@ const PRIMARY = [
   { href: '/upload', label: 'Import Statement', icon: Upload },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
   { href: '/budget', label: 'Budget', icon: PieChart },
+  { href: '/insights', label: 'Trends & Projections', icon: TrendingUp },
   { href: '/goals', label: 'Foundation', icon: Target },
 ];
 
@@ -36,7 +38,7 @@ const MANAGE = [
 
 const MOBILE_TABS = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
-  { href: '/upload', label: 'Import', icon: Upload },
+  { href: '/insights', label: 'Trends', icon: TrendingUp },
   { href: '/budget', label: 'Budget', icon: PieChart },
   { href: '/goals', label: 'Funds', icon: Target },
   { href: '/ai', label: 'CJ-Bot', icon: Bot },

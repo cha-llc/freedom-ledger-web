@@ -36,6 +36,12 @@ import {
   savedThisMonth,
 } from './finance';
 import { daysUntil } from './format';
+import {
+  buildTemporalSnapshot,
+  projectGoals,
+  projectCategorySpending,
+  observedMonthlySavings,
+} from './temporal';
 import type { FinanceContext } from './cjBotTypes';
 
 /** Detect data that is the fictitious demo seed rather than the user's own, so
@@ -490,6 +496,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const emergency = data.goals.find((g) => g.type === 'emergency');
     const retirement = data.goals.find((g) => g.type === 'retirement');
 
+    // Temporal layer: history → current pacing → projection.
+    const snap = buildTemporalSnapshot(data.transactions);
+    const goalProj = projectGoals(data.goals, data.transactions);
+    const catProj = projectCategorySpending(data.transactions);
+    const rising = snap.topCategories
+      .filter((c) => c.trend === 'rising')
+      .slice(0, 4)
+      .map((c) => ({ category: c.category, average: c.average, trendPctPerMonth: c.trendPctPerMonth }));
+    const categoryAverages: FinanceContext['categoryAverages'] = {};
+    for (const c of snap.topCategories) {
+      const p = catProj.find((x) => x.category === c.category);
+      categoryAverages[c.category] = {
+        average: c.average,
+        recent: c.recent,
+        trend: c.trend,
+        projectedNextMonth: p?.projectedNextMonth ?? c.average,
+        monthsSeen: c.monthsSeen,
+      };
+    }
+
     return {
       currency: data.settings.currency,
       cashAvailable,
@@ -513,6 +539,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       retirementStarted: (retirement?.currentAmount ?? 0) > 0,
       recentTransactions: data.transactions.slice(0, 12),
       savedThisMonth: savedThisMonth(data.goals, data.transactions),
+
+      // Temporal
+      monthsOfHistory: snap.monthsOfHistory,
+      hasEnoughHistory: snap.hasEnoughHistory,
+      averageMonthlySpending: snap.averageMonthlySpending,
+      averageMonthlyIncome: snap.averageMonthlyIncome,
+      monthToDateSpending: snap.pace.monthToDateSpending,
+      projectedMonthEndSpending: snap.pace.projectedMonthEnd,
+      spendingPace: snap.pace.pace,
+      spendingVsAveragePct: snap.pace.vsAveragePct,
+      projectedNextMonthSpending: snap.forecast.projectedTotal,
+      projectionConfidence: snap.forecast.confidence,
+      risingCategories: rising,
+      categoryAverages,
+      goalProjections: goalProj.map((g) => ({
+        name: g.name,
+        monthsToTarget: g.monthsToTarget,
+        monthlyContribution: g.monthlyContribution,
+        basis: g.basis,
+      })),
+      observedMonthlySavings: snap.forecast ? observedMonthlySavings(data.transactions) : 0,
     };
   }, [data, cashAvailable]);
 
