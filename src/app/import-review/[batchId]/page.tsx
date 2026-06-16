@@ -2,9 +2,9 @@
 
 import React, { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Check, X, Trash2, AlertTriangle, Copy } from 'lucide-react';
+import { Check, X, Trash2, AlertTriangle } from 'lucide-react';
 import { useStore } from '@/core/useStore';
-import { formatMoney, formatDate } from '@/core/format';
+import { formatDate } from '@/core/format';
 import { cjBotService } from '@/core/cjBotService';
 import type { CJBotResponse } from '@/core/cjBotTypes';
 import {
@@ -34,8 +34,6 @@ export default function ImportReviewPage() {
 
   const batch = store.importBatches.find((b) => b.id === batchId);
   const pending = store.pendingImports[batchId] ?? [];
-  const cur = store.settings.currency;
-  const fmt = (n: number) => formatMoney(n, cur);
 
   const [insight, setInsight] = useState<CJBotResponse | null>(null);
   const ctx = useMemo(() => store.buildFinanceContext(), [store]);

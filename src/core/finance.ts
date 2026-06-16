@@ -56,7 +56,7 @@ export function monthlyTotals(transactions: Transaction[], month = currentMonth(
 }
 
 /** How much CJ has moved into savings goals this month (contribution-based). */
-export function savedThisMonth(goals: SavingsGoal[], transactions: Transaction[]): number {
+export function savedThisMonth(_goals: SavingsGoal[], transactions: Transaction[]): number {
   // MVP heuristic: count transfers tagged toward savings + explicit goal contributions.
   const month = currentMonth();
   return transactions

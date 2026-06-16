@@ -170,7 +170,7 @@ export interface SavingsGoal {
   updatedAt: string;
 }
 
-export type ImportFileType = 'pdf' | 'image';
+export type ImportFileType = 'pdf' | 'image' | 'csv';
 export type ImportStatus = 'pending_review' | 'approved' | 'rejected' | 'deleted';
 
 export interface ImportBatch {

@@ -6,7 +6,7 @@ import { formatMoney } from '@/core/format';
 import { cjBotService } from '@/core/cjBotService';
 import type { CJBotResponse } from '@/core/cjBotTypes';
 import type { BudgetCategory } from '@/core/models';
-import { Card, SectionLabel, Pill, EmptyState, CJBotInsightCard, Modal } from '@/components/ui';
+import { Card, Pill, EmptyState, CJBotInsightCard, Modal } from '@/components/ui';
 import { Lock, Unlock, Sparkles } from 'lucide-react';
 
 export default function BudgetPage() {

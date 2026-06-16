@@ -19,48 +19,90 @@ export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileErrors, setFileErrors] = useState<{ name: string; reason: string }[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
-  async function runImport(upload: WebUploadedFile) {
+  async function runImport(uploads: WebUploadedFile[]) {
+    if (uploads.length === 0) return;
     setBusy(true);
     setError(null);
-    try {
-      const parsed = await statementParserService.parseStatementFile(upload);
-      const existing = store.transactions;
-      const dups = statementParserService.detectDuplicates(parsed, existing);
-      const batchId = uid('batch_');
-      const staged = statementParserService.toStagedTransactions(parsed, batchId, dups);
-      const lowConf = parsed.filter((p) => statementParserService.isLowConfidence(p)).length;
+    setFileErrors([]);
 
-      const batch: ImportBatch = {
-        id: batchId,
-        sourceFileName: upload.file.name,
-        fileType: upload.fileType,
-        uploadDate: todayISO(),
-        status: 'pending_review',
-        transactionCount: staged.length,
-        lowConfidenceCount: lowConf,
-        duplicateCandidateCount: dups.length,
-      };
+    const batchId = uid('batch_');
+    const allParsed: Awaited<ReturnType<typeof statementParserService.parseStatementFile>> = [];
+    const failures: { name: string; reason: string }[] = [];
+    const okFiles: string[] = [];
 
-      store.stageImport(batch, staged);
-      router.push(`/import-review/${batchId}`);
-    } catch (e) {
-      const msg =
-        e instanceof StatementParseError
-          ? e.message
-          : "Couldn't read that file. Try another statement or screenshot.";
-      setError(msg);
-    } finally {
-      setBusy(false);
+    // Process each file independently so one bad file doesn't sink the rest.
+    for (const upload of uploads) {
+      try {
+        const parsed = await statementParserService.parseStatementFile(upload);
+        if (parsed.length === 0) {
+          failures.push({ name: upload.file.name, reason: 'No transactions found in this file.' });
+        } else {
+          allParsed.push(...parsed);
+          okFiles.push(upload.file.name);
+        }
+      } catch (e) {
+        const reason =
+          e instanceof StatementParseError
+            ? e.message
+            : "Couldn't read this file.";
+        failures.push({ name: upload.file.name, reason });
+      }
     }
+
+    setFileErrors(failures);
+
+    if (allParsed.length === 0) {
+      setError(
+        uploads.length === 1
+          ? failures[0]?.reason ?? "Couldn't read that file."
+          : "None of those files could be read. See the details below.",
+      );
+      setBusy(false);
+      return;
+    }
+
+    // Dedupe across the combined set (against existing ledger and within the batch).
+    const existing = store.transactions;
+    const dups = statementParserService.detectDuplicates(allParsed, existing);
+    const staged = statementParserService.toStagedTransactions(allParsed, batchId, dups);
+    const lowConf = allParsed.filter((p) => statementParserService.isLowConfidence(p)).length;
+
+    const sourceName =
+      okFiles.length === 1 ? okFiles[0] : `${okFiles.length} statements`;
+
+    const batch: ImportBatch = {
+      id: batchId,
+      sourceFileName: sourceName,
+      fileType: uploads[0].fileType,
+      uploadDate: todayISO(),
+      status: 'pending_review',
+      transactionCount: staged.length,
+      lowConfidenceCount: lowConf,
+      duplicateCandidateCount: dups.length,
+      notes: okFiles.length > 1 ? `Combined from: ${okFiles.join(', ')}` : undefined,
+    };
+
+    store.stageImport(batch, staged);
+    setBusy(false);
+    router.push(`/import-review/${batchId}`);
+  }
+
+  function toUpload(file: File): WebUploadedFile {
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+    const isCsv =
+      file.type === 'text/csv' ||
+      file.type === 'application/vnd.ms-excel' ||
+      name.endsWith('.csv');
+    return { file, fileType: isPdf ? 'pdf' : isCsv ? 'csv' : 'image' };
   }
 
   function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const file = files[0];
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    runImport({ file, fileType: isPdf ? 'pdf' : 'image' });
+    runImport(Array.from(files).map(toUpload));
   }
 
   const batches = store.importBatches;
@@ -69,9 +111,10 @@ export default function UploadPage() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">Import Statement</div>
+          <div className="page-title">Import Statements</div>
           <div className="page-subtitle">
-            Upload a bank statement PDF or a screenshot. CJ-Bot reads it line by line — nothing
+            Upload one or more bank statement PDFs or screenshots at once. CJ-Bot reads each one
+            line by line — nothing
             is saved until you review and approve.
           </div>
         </div>
@@ -104,7 +147,8 @@ export default function UploadPage() {
         <input
           ref={inputRef}
           type="file"
-          accept="application/pdf,image/*"
+          accept="application/pdf,text/csv,.csv,image/*"
+          multiple
           style={{ display: 'none' }}
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -114,7 +158,7 @@ export default function UploadPage() {
               size={36}
               style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }}
             />
-            <div style={{ fontWeight: 700, marginTop: 14 }}>Reading your statement…</div>
+            <div style={{ fontWeight: 700, marginTop: 14 }}>Reading your statements…</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
               Extracting and parsing transactions
             </div>
@@ -136,9 +180,9 @@ export default function UploadPage() {
             >
               <Upload size={26} />
             </div>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>Drop a statement here</div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>Drop your statements here</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
-              or click to choose a PDF or screenshot
+              or click to choose — you can select multiple PDFs, CSVs, or screenshots at once
             </div>
             <div
               style={{
@@ -151,7 +195,7 @@ export default function UploadPage() {
               }}
             >
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <FileText size={15} /> PDF (read on-device)
+                <FileText size={15} /> PDF & CSV (read on-device)
               </span>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <ImageIcon size={15} /> Screenshot (needs OCR key)
@@ -178,6 +222,23 @@ export default function UploadPage() {
             <div style={{ fontWeight: 700, color: 'var(--danger)' }}>Couldn&apos;t import statement</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 3 }}>{error}</div>
           </div>
+        </div>
+      )}
+
+      {/* Per-file results when some files failed but others may have succeeded. */}
+      {fileErrors.length > 0 && (
+        <div className="card" style={{ marginTop: 16, borderColor: 'var(--warning)' }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--warning)' }}>
+            {fileErrors.length} file{fileErrors.length === 1 ? '' : 's'} couldn&apos;t be read
+          </div>
+          {fileErrors.map((f, i) => (
+            <div key={i} className="row" style={{ alignItems: 'flex-start' }}>
+              <div className="row-main">
+                <div className="row-title">{f.name}</div>
+                <div className="row-sub">{f.reason}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

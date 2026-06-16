@@ -6,7 +6,7 @@ import { formatMoney } from '@/core/format';
 import { calcTravel } from '@/core/finance';
 import { cjBotService } from '@/core/cjBotService';
 import type { CJBotResponse } from '@/core/cjBotTypes';
-import { Card, SectionLabel, CJBotInsightCard, CJDisclaimer, Pill, EmptyState, Field } from '@/components/ui';
+import { Card, SectionLabel, CJBotInsightCard, CJDisclaimer, EmptyState, Field } from '@/components/ui';
 import { Plane } from 'lucide-react';
 
 export default function TravelPage() {

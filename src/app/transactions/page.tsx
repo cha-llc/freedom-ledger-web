@@ -9,7 +9,7 @@ import {
   INCOME_CATEGORIES,
   type TransactionType,
 } from '@/core/models';
-import { Card, SectionLabel, Pill, EmptyState, Modal, Field } from '@/components/ui';
+import { Card, EmptyState, Modal, Field } from '@/components/ui';
 
 const TYPES: TransactionType[] = [
   'income',

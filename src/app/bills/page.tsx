@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useStore } from '@/core/useStore';
 import { formatMoney, formatDate, daysUntil } from '@/core/format';
 import type { BillFrequency, Priority } from '@/core/models';
-import { Card, SectionLabel, Pill, EmptyState, Modal, Field } from '@/components/ui';
+import { Card, Pill, EmptyState, Modal, Field } from '@/components/ui';
 import { Plus, Check, Trash2 } from 'lucide-react';
 
 const PRIORITY_COLOR: Record<Priority, string> = {

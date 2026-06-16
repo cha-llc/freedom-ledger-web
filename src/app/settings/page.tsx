@@ -3,7 +3,6 @@
 import React, { useRef, useState } from 'react';
 import { useStore } from '@/core/useStore';
 import { storage } from '@/core/storage';
-import { formatMoney } from '@/core/format';
 import { Card, SectionLabel, Field } from '@/components/ui';
 import { Download, Upload, Trash2 } from 'lucide-react';
 

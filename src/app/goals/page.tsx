@@ -5,7 +5,7 @@ import { useStore } from '@/core/useStore';
 import { formatMoney } from '@/core/format';
 import { cjBotService } from '@/core/cjBotService';
 import type { CJBotResponse } from '@/core/cjBotTypes';
-import { Card, SectionLabel, CJBotInsightCard, CJDisclaimer, Pill, Field, Modal } from '@/components/ui';
+import { Card, SectionLabel, CJBotInsightCard, CJDisclaimer, Field, Modal } from '@/components/ui';
 import { Plus, PiggyBank } from 'lucide-react';
 
 const FUND_TINT: Record<string, string> = {

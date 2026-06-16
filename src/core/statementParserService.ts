@@ -13,7 +13,7 @@
 
 import type { Transaction, TransactionType } from './models';
 import { uid, todayISO } from './format';
-import { parseStatementText, type RawParsedRow } from './statementTextParser';
+import { parseStatementText, parseCsvText, type RawParsedRow } from './statementTextParser';
 import {
   statementExtractionService,
   type ExtractionStatus,
@@ -103,11 +103,16 @@ export const statementParserService = {
       );
     }
 
-    const rows = parseStatementText(extraction.text, extraction.sourceQuality);
+    const rows =
+      upload.fileType === 'csv'
+        ? parseCsvText(extraction.text, extraction.sourceQuality)
+        : parseStatementText(extraction.text, extraction.sourceQuality);
     if (rows.length === 0) {
       throw new StatementParseError(
         'empty',
-        "We read the file but couldn't find any transactions in it. Make sure it's a statement with a list of dated transactions.",
+        upload.fileType === 'csv'
+          ? "We read the CSV but couldn't find a transaction table in it. Make sure it has columns like Date, Description, and Amount (or Debit/Credit)."
+          : "We read the file but couldn't find any transactions in it. Make sure it's a statement with a list of dated transactions.",
       );
     }
     return rows.map((r) => toParsedTransaction(r, upload.file.name));

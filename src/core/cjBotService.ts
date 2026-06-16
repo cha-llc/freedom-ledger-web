@@ -45,10 +45,6 @@ export interface CJBotProvider {
 // Mock provider — grounded in real finance context
 // ──────────────────────────────────────────────────────────────────────────
 
-function worstRisk(...levels: RiskLevel[]): RiskLevel {
-  const order: RiskLevel[] = ['safe', 'caution', 'risky', 'urgent'];
-  return levels.reduce((acc, l) => (order.indexOf(l) > order.indexOf(acc) ? l : acc), 'safe');
-}
 
 function moneyTight(ctx: FinanceContext): boolean {
   return ctx.cashAvailable - ctx.upcomingBillsTotal - ctx.totalDebtMinimums < 100;
