@@ -8,6 +8,8 @@ import {
   TrendingDown,
   CreditCard,
   ArrowRight,
+  Upload,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { useStore } from '@/core/useStore';
 import { formatMoney, formatMoneyShort, formatDate } from '@/core/format';
@@ -58,7 +60,21 @@ export default function DashboardPage() {
     [store.cashAvailable, store.bills, store.debts, store.settings, store.goals],
   );
 
+  // The app is "empty" until the user enters their own numbers or imports a
+  // statement. We show a get-started panel rather than a wall of zeros, and we
+  // don't ask CJ-Bot to analyze nonexistent data.
+  const hasData =
+    store.transactions.length > 0 ||
+    store.bills.length > 0 ||
+    store.debts.length > 0 ||
+    store.settings.startingCashBalance > 0;
+
   useEffect(() => {
+    if (!hasData) {
+      setLoading(false);
+      setInsight(null);
+      return;
+    }
     let alive = true;
     setLoading(true);
     cjBotService
@@ -69,7 +85,7 @@ export default function DashboardPage() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.cashAvailable]);
+  }, [store.cashAvailable, hasData]);
 
   const rainy = store.goals.find((g) => g.type === 'rainy_day');
   const emergency = store.goals.find((g) => g.type === 'emergency');
@@ -83,6 +99,84 @@ export default function DashboardPage() {
       : 'var(--success)';
 
   const recent = store.transactions.slice(0, 6);
+
+  if (!hasData) {
+    return (
+      <>
+        <div className="page-header">
+          <div>
+            <div className="page-title">Welcome to Freedom Ledger</div>
+            <div className="page-subtitle">
+              Your personal financial command center — empty and ready for your real numbers
+            </div>
+          </div>
+          <Pill label={cur} />
+        </div>
+
+        <Card style={{ textAlign: 'center', padding: '40px 24px' }}>
+          <div
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: 18,
+              background: 'var(--accent-soft)',
+              color: 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+            }}
+          >
+            <Wallet size={28} />
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>Nothing here yet — and that&apos;s on purpose</div>
+          <div
+            style={{
+              color: 'var(--text-muted)',
+              fontSize: 15,
+              maxWidth: 460,
+              margin: '8px auto 0',
+              lineHeight: 1.5,
+            }}
+          >
+            Freedom Ledger only ever shows your real money. Start by importing a bank statement, or
+            enter your starting balance and income in Settings. CJ-Bot begins giving you guidance the
+            moment it has real numbers to work with.
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'center',
+              marginTop: 24,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button className="btn btn-primary" onClick={() => router.push('/upload')}>
+              <Upload size={16} /> Import a statement
+            </button>
+            <button className="btn btn-ghost" onClick={() => router.push('/settings')}>
+              <SettingsIcon size={16} /> Enter my numbers
+            </button>
+          </div>
+        </Card>
+
+        <SectionLabel>What you&apos;ll track</SectionLabel>
+        <div className="grid grid-3">
+          <StatTile icon={<Wallet size={18} />} value="Safe to spend" label="What's truly yours today" tint="var(--accent)" />
+          <StatTile icon={<Receipt size={18} />} value="Bills & runway" label="How long your cash lasts" tint="var(--warning)" />
+          <StatTile icon={<TrendingDown size={18} />} value="The 3 funds" label="Rainy day, emergency, retirement" tint="var(--foundation)" />
+        </div>
+
+        <div className="disclaimer">
+          Freedom Ledger is for personal finances only and stores everything locally in your browser.
+          It shows only data you enter or import — never sample or placeholder numbers. CJ-Bot gives
+          CPA-style guidance but is not a licensed CPA, attorney, or financial adviser.
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

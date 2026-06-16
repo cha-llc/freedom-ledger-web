@@ -5,7 +5,7 @@ import { useStore } from '@/core/useStore';
 import { storage } from '@/core/storage';
 import { formatMoney } from '@/core/format';
 import { Card, SectionLabel, Field } from '@/components/ui';
-import { Download, Upload, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, Upload, Trash2 } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CRC', 'COP'];
 
@@ -164,18 +164,11 @@ export default function SettingsPage() {
 
       <SectionLabel>Data</SectionLabel>
       <Card>
+        <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 14 }}>
+          Freedom Ledger only shows money you enter or import — it never loads sample or
+          placeholder figures. If you want a clean slate, you can erase everything in this browser.
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              if (confirm('Reload the demo data? This replaces your current data.')) {
-                store.resetToSeed();
-                setMsg('Demo data loaded.');
-              }
-            }}
-          >
-            <RotateCcw size={16} /> Load demo data
-          </button>
           <button
             className="btn btn-danger"
             onClick={() => {

@@ -25,15 +25,6 @@ import type {
   AppSettings,
 } from './models';
 import { storage, AppData } from './storage';
-import {
-  SEED_SETTINGS,
-  SEED_TRANSACTIONS,
-  SEED_BILLS,
-  SEED_DEBTS,
-  SEED_BUDGET,
-  SEED_GOALS,
-  SEED_IMPORT_BATCHES,
-} from './seed';
 import { todayISO, uid } from './format';
 import {
   monthlyTotals,
@@ -47,15 +38,105 @@ import {
 import { daysUntil } from './format';
 import type { FinanceContext } from './cjBotTypes';
 
-function seedData(): AppData {
+/** Detect data that is the fictitious demo seed rather than the user's own, so
+ *  any demo data a previous version may have saved to a browser gets cleared and
+ *  the app only ever displays real numbers. Conservative: requires fingerprints a
+ *  real user could not coincidentally produce. */
+function isDemoSeed(d: AppData): boolean {
+  if (!d) return false;
+  // The demo import batch is a fingerprint a real user could never produce.
+  const hasDemoBatch = (d.importBatches ?? []).some(
+    (b) => b.id === 'batch_demo' || b.sourceFileName === 'statement_apr.pdf',
+  );
+  if (hasDemoBatch) return true;
+
+  // Otherwise require MULTIPLE seed fingerprints together, so we never wipe a real
+  // user who happens to have a round number.
+  const demoTxns = (d.transactions ?? []).filter(
+    (t) =>
+      t.description === 'AutoMercado Groceries' ||
+      t.description === 'Uber ride - Alajuela' ||
+      t.description === 'Paycheck deposit' ||
+      t.description === 'Dog food' ||
+      t.description === 'Pharmacy - meds',
+  ).length;
+  const seedCash = d.settings?.startingCashBalance === 186;
+  const rainy = (d.goals ?? []).find((g) => g.id === 'goal_rainy');
+  const seedRainy = rainy?.currentAmount === 82;
+
+  const signals = [demoTxns >= 3, seedCash, seedRainy].filter(Boolean).length;
+  return signals >= 2;
+}
+
+/** The real starting state: empty. Neutral default settings with no invented
+ *  cash, income, bills, or transactions. Everything shown to the user from here
+ *  is data they entered or imported themselves. The three foundation funds are
+ *  created at zero so the user has something to contribute toward — these hold
+ *  no fictitious balances (all start at 0). */
+function emptyData(): AppData {
+  const now = todayISO();
+  const settings: AppSettings = {
+    currency: 'USD',
+    startingCashBalance: 0,
+    nextIncomeDate: todayISO(),
+    incomeFrequency: 'biweekly',
+    survivalMonthlyExpense: 0,
+    rainyDayTarget: 500,
+    emergencyFundTarget: 1000,
+    retirementContributionTarget: 0,
+    aiProvider: 'cj-bot-llama',
+    onboarded: false,
+    biometricLockEnabled: false,
+    notificationsEnabled: false,
+    billReminderDays: 3,
+    dailyLimitAlertsEnabled: false,
+    paydayReminderEnabled: false,
+  };
   return {
-    settings: SEED_SETTINGS,
-    transactions: SEED_TRANSACTIONS,
-    bills: SEED_BILLS,
-    debts: SEED_DEBTS,
-    budget: SEED_BUDGET,
-    goals: SEED_GOALS,
-    importBatches: SEED_IMPORT_BATCHES,
+    settings,
+    transactions: [],
+    bills: [],
+    debts: [],
+    budget: [],
+    goals: [
+      {
+        id: 'goal_rainy',
+        name: 'Rainy Day Fund',
+        type: 'rainy_day',
+        targetAmount: 500,
+        currentAmount: 0,
+        currency: 'USD',
+        priority: 'critical',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'goal_emergency',
+        name: 'Emergency Fund',
+        type: 'emergency',
+        targetAmount: 1000,
+        currentAmount: 0,
+        currency: 'USD',
+        priority: 'high',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'goal_retirement',
+        name: 'Retirement Fund',
+        type: 'retirement',
+        targetAmount: 1000,
+        currentAmount: 0,
+        currency: 'USD',
+        priority: 'medium',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    importBatches: [],
     travelPlans: [],
     pendingImports: {},
   };
@@ -111,20 +192,29 @@ interface Store extends AppData {
   cashAvailable: number;
   buildFinanceContext: () => FinanceContext;
 
-  resetToSeed: () => void;
   clearAllData: () => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>(seedData());
+  const [data, setData] = useState<AppData>(emptyData());
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     (async () => {
       const loaded = await storage.load();
-      if (loaded) setData(loaded);
+      if (loaded && !isDemoSeed(loaded)) {
+        // Real user data — keep it.
+        setData(loaded);
+      } else if (loaded && isDemoSeed(loaded)) {
+        // A previous version saved fictitious demo data to this browser. Clear it
+        // so the user sees only real numbers, and persist the clean empty state.
+        const fresh = emptyData();
+        setData(fresh);
+        await storage.save(fresh);
+      }
+      // else: nothing saved yet → stay on the empty default.
       setReady(true);
     })();
   }, []);
@@ -353,23 +443,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const resetToSeed = useCallback(() => setData(seedData()), []);
 
   // Empty every collection but keep the user's current settings. Used after
   // onboarding so the user starts with their own numbers, not the demo seed.
   const clearAllData = useCallback(
     () =>
-      setData((d) => ({
-        settings: d.settings,
-        transactions: [],
-        bills: [],
-        debts: [],
-        budget: [],
-        goals: [],
-        importBatches: [],
-        travelPlans: [],
-        pendingImports: {},
-      })),
+      setData((d) => {
+        const fresh = emptyData();
+        return {
+          // Keep the user's own settings (currency, targets, income date)…
+          settings: d.settings,
+          // …but clear every record of money and restore empty foundation funds.
+          transactions: [],
+          bills: [],
+          debts: [],
+          budget: [],
+          goals: fresh.goals,
+          importBatches: [],
+          travelPlans: [],
+          pendingImports: {},
+        };
+      }),
     [],
   );
 
@@ -454,7 +548,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     deleteImportBatch,
     cashAvailable,
     buildFinanceContext,
-    resetToSeed,
     clearAllData,
   };
 
