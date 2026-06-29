@@ -23,7 +23,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/pako": "^2.0.3",
-    "typescript": "^5",
+    "typescript": "^6",
     "prettier": "^3.0.0"
   }
 }
